@@ -34,6 +34,7 @@ class HoroscopeViewModel(
         "Capricorn",
         "Aquarius",
         "Pisces",
+        "Fall",
     )
 
     val availablePeriods = listOf("daily", "weekly", "monthly")
@@ -57,6 +58,12 @@ class HoroscopeViewModel(
     fun fetchHoroscope() {
         viewModelScope.launch {
             _uiState.value = HoroscopeUiState.Loading
+
+            if (_selectedSign.value == "Fall") {
+                _uiState.value = HoroscopeUiState.Error("Error: signo no existe")
+                return@launch
+            }
+
             try {
                 val response = repository.fetchHoroscope(
                     sign = _selectedSign.value,
