@@ -1,16 +1,29 @@
 package com.plataformas.horoscoapp.ui.horoscope
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.plataformas.horoscoapp.data.mapper.toDomain
 import com.plataformas.horoscoapp.data.repository.HoroscopeRepository
+import com.plataformas.horoscoapp.di.AppContainer
 import com.plataformas.horoscoapp.ui.state.HoroscopeUiState
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 class HoroscopeViewModel(
-    private val repository: HoroscopeRepository = HoroscopeRepository()
-) : ViewModel() {
+    application: Application,
+) : AndroidViewModel(application) {
+
+    private val repository = AppContainer.horoscopeRepository(application)
 
     private val _uiState = MutableStateFlow<HoroscopeUiState>(HoroscopeUiState.Loading)
     val uiState: StateFlow<HoroscopeUiState> = _uiState
@@ -21,25 +34,15 @@ class HoroscopeViewModel(
     private val _selectedPeriod = MutableStateFlow("daily")
     val selectedPeriod: StateFlow<String> = _selectedPeriod
 
-    val availableSigns = listOf(
-        "Aries",
-        "Taurus",
-        "Gemini",
-        "Cancer",
-        "Leo",
-        "Virgo",
-        "Libra",
-        "Scorpio",
-        "Sagittarius",
-        "Capricorn",
-        "Aquarius",
-        "Pisces",
-        "Fall",
-    )
+    val availableSigns = HoroscopeRepository.AVAILABLE_SIGNS + HoroscopeRepository.INVALID_SIGN
 
-    val availablePeriods = listOf("daily", "weekly", "monthly")
+    val availablePeriods = HoroscopeRepository.AVAILABLE_PERIODS
+
+    private var cacheJob: Job? = null
 
     init {
+        observeCachedHoroscope()
+        observeNetworkRecovery()
         fetchHoroscope()
     }
 
@@ -57,24 +60,63 @@ class HoroscopeViewModel(
 
     fun fetchHoroscope() {
         viewModelScope.launch {
-            _uiState.value = HoroscopeUiState.Loading
+            val sign = _selectedSign.value
+            val period = _selectedPeriod.value
+            val cached = repository.getCachedHoroscope(sign, period)
 
-            if (_selectedSign.value == "Fall") {
+            if (cached == null) {
+                _uiState.value = HoroscopeUiState.Loading
+            }
+
+            if (sign == HoroscopeRepository.INVALID_SIGN) {
                 _uiState.value = HoroscopeUiState.Error("Error: signo no existe")
                 return@launch
             }
 
             try {
-                val response = repository.fetchHoroscope(
-                    sign = _selectedSign.value,
-                    period = _selectedPeriod.value,
-                )
-                _uiState.value = HoroscopeUiState.Success(response.data)
+                repository.syncHoroscope(sign = sign, period = period)
             } catch (error: Exception) {
-                _uiState.value = HoroscopeUiState.Error(
-                    error.localizedMessage ?: "No se pudo cargar el horóscopo"
-                )
+                if (cached == null) {
+                    _uiState.value = HoroscopeUiState.Error(
+                        error.localizedMessage ?: "No se pudo cargar el horóscopo"
+                    )
+                }
             }
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun observeCachedHoroscope() {
+        cacheJob?.cancel()
+        cacheJob = viewModelScope.launch {
+            combine(
+                _selectedSign,
+                _selectedPeriod,
+            ) { sign, period -> sign to period }
+                .distinctUntilChanged()
+                .flatMapLatest { (sign, period) ->
+                    repository.observeHoroscope(sign, period).map { entity -> sign to entity }
+                }
+                .collectLatest { (sign, entity) ->
+                    if (sign == HoroscopeRepository.INVALID_SIGN) return@collectLatest
+                    entity ?: return@collectLatest
+
+                    _uiState.value = HoroscopeUiState.Success(
+                        horoscope = entity.toDomain(),
+                        isCached = !repository.isOnline(),
+                        updatedAt = entity.updatedAt,
+                    )
+                }
+        }
+    }
+
+    private fun observeNetworkRecovery() {
+        viewModelScope.launch {
+            repository.observeNetwork()
+                .filter { isOnline -> isOnline }
+                .collectLatest {
+                    fetchHoroscope()
+                }
         }
     }
 }

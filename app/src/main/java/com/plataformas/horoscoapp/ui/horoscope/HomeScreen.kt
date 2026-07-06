@@ -23,12 +23,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.plataformas.horoscoapp.ui.state.HoroscopeUiState
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -105,12 +107,15 @@ fun HoroscopeApp(
                         }
                     }
                     is HoroscopeUiState.Success -> {
-                        val horoscope = (uiState as HoroscopeUiState.Success).horoscope
+                        val success = uiState as HoroscopeUiState.Success
+                        val horoscope = success.horoscope
                         HoroscopeCard(
                             horoscopeText = horoscope.horoscope,
                             sign = horoscope.sign,
                             date = horoscope.date,
                             period = horoscope.period,
+                            isCached = success.isCached,
+                            updatedAt = success.updatedAt,
                             modifier = Modifier.weight(1f),
                         )
                     }
@@ -168,6 +173,8 @@ private fun HoroscopeCard(
     sign: String,
     date: String,
     period: String,
+    isCached: Boolean,
+    updatedAt: Long,
     modifier: Modifier = Modifier,
 ) {
     Card(
@@ -199,10 +206,22 @@ private fun HoroscopeCard(
                     .verticalScroll(rememberScrollState()),
             )
             TextButton(onClick = {}) {
-                Text(text = "Actualizado al vuelo")
+                Text(
+                    text = if (isCached) {
+                        "Offline - guardado ${updatedAt.asReadableTime()}"
+                    } else {
+                        "Actualizado ${updatedAt.asReadableTime()}"
+                    }
+                )
             }
         }
     }
+}
+
+private fun Long.asReadableTime(): String {
+    if (this <= 0L) return "localmente"
+    val formatter = SimpleDateFormat("dd/MM HH:mm", Locale.getDefault())
+    return formatter.format(Date(this))
 }
 
 @Composable
