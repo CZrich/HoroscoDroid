@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "376567594349",
+    "project_id": "horoscodroid",
+    "storage_bucket": "horoscodroid.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:376567594349:android:40f806ceed2bd3586dae64",
+        "android_client_info": {
+          "package_name": "com.plataformas.horoscoapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCZUIm8d46J7n3tf0wNsTh5AfTNrP66ujQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

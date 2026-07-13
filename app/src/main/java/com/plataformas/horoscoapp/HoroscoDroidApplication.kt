@@ -6,12 +6,14 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import com.plataformas.horoscoapp.data.notification.DailyHoroscopeNotifier
 import com.plataformas.horoscoapp.data.sync.HoroscopeSyncWorker
 import java.util.concurrent.TimeUnit
 
 class HoroscoDroidApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+        DailyHoroscopeNotifier(this).createNotificationChannel()
         scheduleHoroscopeSync()
     }
 
