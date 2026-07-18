@@ -14,6 +14,9 @@ interface HoroscopeDao {
     @Query("SELECT * FROM horoscopes WHERE sign = :sign ORDER BY updatedAt DESC")
     fun observeBySign(sign: String): Flow<List<HoroscopeEntity>>
 
+    @Query("SELECT * FROM horoscopes ORDER BY updatedAt DESC")
+    fun observeHistory(): Flow<List<HoroscopeEntity>>
+
     @Query("SELECT * FROM horoscopes WHERE cacheKey = :cacheKey LIMIT 1")
     suspend fun getHoroscope(cacheKey: String): HoroscopeEntity?
 

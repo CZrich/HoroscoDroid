@@ -11,10 +11,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.tooling.preview.Preview
 import com.plataformas.horoscoapp.data.notification.NotificationConstants.EXTRA_ROUTE
 import com.plataformas.horoscoapp.data.notification.NotificationConstants.EXTRA_SIGN
-import com.plataformas.horoscoapp.ui.horoscope.HoroscopeApp
+import com.plataformas.horoscoapp.app.HoroscopeApp
 import com.plataformas.horoscoapp.ui.theme.HoroscoAppTheme
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.MutableStateFlow
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     private val notificationSign = MutableStateFlow<String?>(null)
     private var lastNotificationRoute: String? = null

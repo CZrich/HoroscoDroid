@@ -2,8 +2,9 @@ package com.plataformas.horoscoapp.data.repository
 
 import com.google.android.gms.tasks.Task
 import com.google.firebase.messaging.FirebaseMessaging
+import com.plataformas.horoscoapp.core.model.ZodiacSign
+import com.plataformas.horoscoapp.core.model.normalizeIdentifier
 import com.plataformas.horoscoapp.data.preferences.NotificationPreferencesDataSource
-import java.text.Normalizer
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -15,6 +16,11 @@ class NotificationRepository(
     private val firebaseMessaging: FirebaseMessaging = FirebaseMessaging.getInstance(),
 ) {
     val selectedSign: Flow<String?> = preferences.selectedSign
+    val favoriteSign: Flow<String?> = preferences.favoriteSign
+
+    suspend fun saveFavoriteSign(sign: String) {
+        preferences.saveFavoriteSign(sign)
+    }
 
     suspend fun selectSign(sign: String): Result<Unit> {
         val previousSign = selectedSign.first()
@@ -31,16 +37,8 @@ class NotificationRepository(
     }
 
     companion object {
-        private const val TOPIC_PREFIX = "horoscope_"
-
         fun topicForSign(sign: String): String {
-            val normalizedSign = Normalizer.normalize(sign, Normalizer.Form.NFD)
-                .replace("\\p{Mn}+".toRegex(), "")
-                .lowercase()
-                .replace("[^a-z0-9-_.~%]+".toRegex(), "_")
-                .trim('_')
-
-            return TOPIC_PREFIX + normalizedSign
+            return ZodiacSign.from(sign)?.topicName ?: "horoscope_${sign.normalizeIdentifier()}"
         }
     }
 }

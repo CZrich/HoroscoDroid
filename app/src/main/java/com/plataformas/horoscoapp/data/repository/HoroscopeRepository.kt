@@ -7,6 +7,8 @@ import com.plataformas.horoscoapp.data.mapper.toEntity
 import com.plataformas.horoscoapp.data.network.HoroscopeApiService
 import com.plataformas.horoscoapp.data.network.NetworkMonitor
 import com.plataformas.horoscoapp.data.network.NetworkModule
+import com.plataformas.horoscoapp.core.model.HoroscopePeriod
+import com.plataformas.horoscoapp.core.model.ZodiacSign
 import java.io.IOException
 import kotlinx.coroutines.flow.Flow
 
@@ -26,6 +28,10 @@ class HoroscopeRepository(
     fun isOnline(): Boolean = networkMonitor.isOnline()
 
     fun observeNetwork(): Flow<Boolean> = networkMonitor.isOnlineFlow
+
+    fun observeHistory(): Flow<List<HoroscopeEntity>> {
+        return dao.observeHistory()
+    }
 
     suspend fun syncHoroscope(sign: String, period: String) {
         if (sign == INVALID_SIGN) {
@@ -60,21 +66,8 @@ class HoroscopeRepository(
     companion object {
         const val INVALID_SIGN = "Fall"
 
-        val AVAILABLE_SIGNS = listOf(
-            "Aries",
-            "Taurus",
-            "Gemini",
-            "Cancer",
-            "Leo",
-            "Virgo",
-            "Libra",
-            "Scorpio",
-            "Sagittarius",
-            "Capricorn",
-            "Aquarius",
-            "Pisces",
-        )
+        val AVAILABLE_SIGNS = ZodiacSign.entries.map { sign -> sign.displayName }
 
-        val AVAILABLE_PERIODS = listOf("daily", "weekly", "monthly")
+        val AVAILABLE_PERIODS = HoroscopePeriod.entries.map { period -> period.apiValue }
     }
 }

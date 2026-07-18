@@ -16,13 +16,24 @@ class NotificationPreferencesDataSource(
         preferences[SELECTED_SIGN_KEY]
     }
 
+    val favoriteSign: Flow<String?> = context.notificationDataStore.data.map { preferences ->
+        preferences[FAVORITE_SIGN_KEY]
+    }
+
     suspend fun saveSelectedSign(sign: String) {
         context.notificationDataStore.edit { preferences ->
             preferences[SELECTED_SIGN_KEY] = sign
         }
     }
 
+    suspend fun saveFavoriteSign(sign: String) {
+        context.notificationDataStore.edit { preferences ->
+            preferences[FAVORITE_SIGN_KEY] = sign
+        }
+    }
+
     private companion object {
         val SELECTED_SIGN_KEY = stringPreferencesKey("selected_notification_sign")
+        val FAVORITE_SIGN_KEY = stringPreferencesKey("favorite_sign")
     }
 }

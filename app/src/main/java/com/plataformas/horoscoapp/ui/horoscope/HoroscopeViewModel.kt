@@ -1,13 +1,17 @@
-package com.plataformas.horoscoapp.ui.horoscope
+package com.plataformas.horoscoapp.feature.horoscope
 
-import android.app.Application
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.WorkInfo
 import com.plataformas.horoscoapp.data.mapper.toDomain
+import com.plataformas.horoscoapp.data.model.HoroscopeData
 import com.plataformas.horoscoapp.data.repository.HoroscopeRepository
 import com.plataformas.horoscoapp.data.repository.NotificationRepository
-import com.plataformas.horoscoapp.di.AppContainer
+import com.plataformas.horoscoapp.data.sync.HoroscopeSyncWorker
 import com.plataformas.horoscoapp.ui.state.HoroscopeUiState
+import com.plataformas.horoscoapp.data.sync.HoroscopeSyncScheduler
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.collectLatest
@@ -20,12 +24,12 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
-class HoroscopeViewModel(
-    application: Application,
-) : AndroidViewModel(application) {
-
-    private val repository = AppContainer.horoscopeRepository(application)
-    private val notificationRepository = AppContainer.notificationRepository(application)
+@HiltViewModel
+class HoroscopeViewModel @Inject constructor(
+    private val repository: HoroscopeRepository,
+    private val notificationRepository: NotificationRepository,
+    private val syncScheduler: HoroscopeSyncScheduler,
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow<HoroscopeUiState>(HoroscopeUiState.Loading)
     val uiState: StateFlow<HoroscopeUiState> = _uiState
@@ -39,8 +43,17 @@ class HoroscopeViewModel(
     private val _selectedNotificationSign = MutableStateFlow<String?>(null)
     val selectedNotificationSign: StateFlow<String?> = _selectedNotificationSign
 
+    private val _favoriteSign = MutableStateFlow("Aquarius")
+    val favoriteSign: StateFlow<String> = _favoriteSign
+
     private val _notificationMessage = MutableStateFlow<String?>(null)
     val notificationMessage: StateFlow<String?> = _notificationMessage
+
+    private val _syncMessage = MutableStateFlow<String?>(null)
+    val syncMessage: StateFlow<String?> = _syncMessage
+
+    private val _history = MutableStateFlow<List<HoroscopeData>>(emptyList())
+    val history: StateFlow<List<HoroscopeData>> = _history
 
     val availableSigns = HoroscopeRepository.AVAILABLE_SIGNS + HoroscopeRepository.INVALID_SIGN
 
@@ -49,11 +62,15 @@ class HoroscopeViewModel(
     val availablePeriods = HoroscopeRepository.AVAILABLE_PERIODS
 
     private var cacheJob: Job? = null
+    private var favoriteApplied = false
 
     init {
         observeCachedHoroscope()
         observeNetworkRecovery()
         observeSelectedNotificationSign()
+        observeFavoriteSign()
+        observeManualSync()
+        observeHistory()
         fetchHoroscope()
     }
 
@@ -126,8 +143,34 @@ class HoroscopeViewModel(
         }
     }
 
+    fun selectFavoriteSign(sign: String) {
+        val projectSign = sign.toProjectSign()
+        if (projectSign == null) {
+            _notificationMessage.value = "No se pudo guardar favorito: signo inválido."
+            return
+        }
+
+        viewModelScope.launch {
+            notificationRepository.saveFavoriteSign(projectSign)
+            _favoriteSign.value = projectSign
+            _selectedSign.value = projectSign
+            _selectedPeriod.value = HoroscopeSyncWorker.DEFAULT_PERIOD
+            syncScheduler.enqueuePeriodicSync(projectSign)
+            _syncMessage.value = "WorkManager diario configurado para $projectSign."
+            fetchHoroscope()
+        }
+    }
+
     fun onNotificationPermissionDenied() {
         _notificationMessage.value = "Permiso de notificaciones denegado. Podés habilitarlo desde ajustes del sistema."
+    }
+
+    fun refreshWithWorker() {
+        _syncMessage.value = "Sincronización en segundo plano programada..."
+        syncScheduler.enqueueManualSync(
+            sign = _selectedSign.value,
+            period = _selectedPeriod.value,
+        )
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -169,6 +212,50 @@ class HoroscopeViewModel(
         viewModelScope.launch {
             notificationRepository.selectedSign.collectLatest { sign ->
                 _selectedNotificationSign.value = sign
+            }
+        }
+    }
+
+    private fun observeFavoriteSign() {
+        viewModelScope.launch {
+            notificationRepository.favoriteSign.collectLatest { sign ->
+                val projectSign = sign?.toProjectSign() ?: "Aquarius"
+                _favoriteSign.value = projectSign
+                syncScheduler.enqueuePeriodicSync(projectSign)
+                if (!favoriteApplied) {
+                    favoriteApplied = true
+                    _selectedSign.value = projectSign
+                    _selectedPeriod.value = HoroscopeSyncWorker.DEFAULT_PERIOD
+                    fetchHoroscope()
+                }
+            }
+        }
+    }
+
+    private fun observeManualSync() {
+        viewModelScope.launch {
+            syncScheduler.observeManualSync().collectLatest { workInfo ->
+                _syncMessage.value = when (workInfo?.state) {
+                    WorkInfo.State.ENQUEUED -> "Sincronización en cola."
+                    WorkInfo.State.RUNNING -> "Sincronizando horóscopo en segundo plano..."
+                    WorkInfo.State.SUCCEEDED -> {
+                        val sign = workInfo.outputData.getString(HoroscopeSyncWorker.KEY_SYNCED_SIGN)
+                        val period = workInfo.outputData.getString(HoroscopeSyncWorker.KEY_SYNCED_PERIOD)
+                        "Sincronizado: ${sign ?: _selectedSign.value} - ${period ?: _selectedPeriod.value}."
+                    }
+                    WorkInfo.State.FAILED -> "No se pudo sincronizar en segundo plano."
+                    WorkInfo.State.BLOCKED -> "Sincronización esperando otra tarea."
+                    WorkInfo.State.CANCELLED -> "Sincronización cancelada."
+                    null -> null
+                }
+            }
+        }
+    }
+
+    private fun observeHistory() {
+        viewModelScope.launch {
+            repository.observeHistory().collectLatest { entities ->
+                _history.value = entities.map { entity -> entity.toDomain() }
             }
         }
     }
